@@ -21,7 +21,6 @@ class Master:
         
         self.top_of_block = self.child #top_of_block points to the first shape in a selected block
         self.first_shelf.set_companion(self.top_of_block) #Allows the first shelf to communicate with the first shape
-        self.shelves_back = 0 #Keeps track of how many lines of code are behind the first line shown on screen; used for scrolling
         self.bottom_of_block = self.top_of_block #bottom_of_block points to the last shape in a selected block
         
         self.final = Terminal_Shape(self.bottom_of_block,self) #'Shapes' are tracked in a linked list; Terminal shapes 
@@ -33,7 +32,7 @@ class Master:
         self.selection_deletion_handle = lambda s: None #Accessed by shelves
         self.history = [] #History hasn't been implemented yet
         self.text = "START" #Used in debugging
-        
+        #self.root.after_idle(update_history)
         self.root.mainloop() 
         
         
@@ -191,36 +190,53 @@ class Master:
                 working_file.close()
             except:
                 pass
-        for line in working_file: #Generates shapes 
-            self.top_of_block.companion.contents.set(line[:-1]) #Loads line from file into new shape
+        i = 1
+        for line in working_file: #Generates shapes
+            self.top_of_block.companion.contents.set(line[:-1]+" ") #Loads line from file into new shape
             self.top_of_block.new_shape() #Creates a new shape to add information to
             self.top_of_block = self.top_of_block.child 
+            #print(line,self.first_shelf.final)
+            i+=1
         self.bottom_of_block = self.top_of_block
+        
         if file_open:
             working_file.close()
             
             
     def scroll(self,jstring,string_fraction,jarg=None): #Allows user to scroll through project
-        if jarg == None:
-            fraction = float(string_fraction)
-            hidden = self.first_shelf.count_covered_cascade(self.root.winfo_height(),0) #The number of shelves below the screen
-            amount = int(float(fraction)*(hidden+self.shelves_back)) #Determines which line the first shelf should display
-            if amount > self.shelves_back:
-                for i in self.scroll_forward(amount):
-                    self.first_shelf.set_companion(self.first_shelf.companion.child)
-            elif amount < self.shelves_back:
-                for i in self.scroll_back(amount):
-                    self.first_shelf.set_companion(self.first_shelf.companion.parent)
-            self.first_shelf.companion.companion = self.first_shelf
-            self.first_shelf.companion.child.order_update_cascade(self.first_shelf)
-            self.shelves_back = amount
-            self.scrollbar.set(fraction,fraction+.05)
+        if  not(self.first_shelf.final and self.first_shelf.companion == self.child):
+            self.key = False
+            if jarg == 1: #jarg indicates which arrow button, if any, on the scrollbar was pressed
+                string_fraction = '.9'
+            elif jarg == -1:
+                string_fraction = '0'
             
-    def scroll_back(self,amount): #Used if lines of code above the screen need to be accessed
-        return range(self.shelves_back-amount)
-        
-    def scroll_forward(self,amount): #Used if lines of code below the screen need to be accessed
-        return range(amount-self.shelves_back)
+            fraction = float(string_fraction) #Converts the string argument into a floating point number
+            fraction=fraction/.9
+            
+            back = self.child.from_shelf(self.first_shelf) #How many shapes are above the companion of the first shelf
+            master_height = self.root.winfo_height()-50
+            last_visible,remaining = self.first_shelf.tally_1(master_height,False)  #How many shapes are below the companion
+                                                                                    #of the last shelf on screen
+            
+            move_to = int(fraction*(back+remaining+1)) #How many shapes should be above the companion of the first shelf
+            if move_to > back: #Determines if the app should scroll up or down
+                while move_to > back and remaining > 0 and self.first_shelf.companion.child != self.final:
+                    self.first_shelf.set_companion(self.first_shelf.companion.child) #The first shelf takes the child
+                                              #of its companion as its companion
+                    back+=1 #Exits loop if back exceeds move_to
+                    remaining -=1 #Exits loop if remaining becomes zero
+            else:
+                while move_to < back and self.first_shelf.companion.parent != self:
+                    self.first_shelf.set_companion(self.first_shelf.companion.parent) #The first shelf takes the parent
+                                              #of its companion as its companion
+                    back-=1#Exits loop if move_to exceeds back
+                    
+            self.first_shelf.companion.companion = self.first_shelf #Creates mutual companionship between 
+                          #the first shelf and its current companion
+            self.first_shelf.companion.child.order_update_cascade(self.first_shelf) #Updates the app
+            self.scrollbar.set(fraction*.9,fraction*.9+.05) #Sets the scrollbar to where the user moved it to
+            
 
 class Shape: #Control code statements
     def __init__(self,parent,master,companion):
@@ -234,15 +250,17 @@ class Shape: #Control code statements
         self.set_child(Shape(self,self.master,self.companion))
         self.child.order_update_cascade(self.companion)
         self.child.companion.box.focus_set()
+        #if self.child.companion.final:
+            #self.master.scroll('filler','1')
         
     def order_update_cascade(self,shelf): #Used if shape objects have been moved
-        if shelf.pass_child(self) != self.companion: #Decides if line should be displayed at the current location on screen
+        if shelf.order_test(self): #Decides if line should be displayed at the current location on screen
             self.companion = shelf.child #Communicates with the child of the widget that was taken as an argument
-            self.companion.contents.set(self.text)
-            self.child.order_update_cascade(self.companion)
+            self.companion.contents.set(self.text) #Gives the companion shelf the shape's held value
+            self.child.order_update_cascade(self.companion) #Updates child
             
                 
-    def update(self):
+    def update(self): #Communicates with companion shelf
         #self.master.history.append(History(self.parent,self.child))
         self.text = self.companion.contents.get() #Sets text value to the value entered into the companion widget
         if self.text == "" and self.parent != self.master: #Deletes shape if companion widget is blank
@@ -261,6 +279,11 @@ class Shape: #Control code statements
         file.write(self.text+"\n")
         self.child.save_file(file)
         
+    def from_shelf(self,shelf): #Determines how many generations this shape is from the companion of the shelf argument
+        if shelf.companion == self:
+            return 0
+        else:
+            return self.child.from_shelf(shelf) + 1
     
 
 class Shelf: #Controls widgets on screen
@@ -277,6 +300,18 @@ class Shelf: #Controls widgets on screen
         self.box.bind("<BackSpace>", lambda e: master.selection_deletion_handle(self)) #Allows user to delete a selection
         self.final = True #Is the last shelf to be created
         
+    def order_test(self,shape): #Determines if child shelf is paired to the correct shape; returns False if so
+        if self.final:
+            self.final = False
+            self.child = Shelf(self,self.master)
+            self.child.set_companion(shape)
+            return True
+        elif self.child.companion == shape:
+            return False
+        else:
+            self.child.set_companion(shape)
+            return True
+    
     def pass_child(self,shape): #Returns the widget below this one; creates widget if none exists
         if self.final:
             self.child = Shelf(self,self.master)
@@ -302,18 +337,20 @@ class Shelf: #Controls widgets on screen
         if not(self.final):
             self.child.truncate()
             
-    def count_covered_cascade(self,y,ylast): #Allows master to determine how many widgets are below the screen
+    def tally_1(self,y,downstream): #Determines how many generations this shelf is from the last shelf visible
         if self.final:
-            if self.frame.winfo_y() < y and ylast != 0:
-                return 0
-            else:
-                return 1
-                
+            return self,0
+        elif self.frame.winfo_y() > y or (self.frame.winfo_y() == 0 and downstream):
+            return self,self.child.tally_2()
         else:
-            if self.frame.winfo_y() < y and ylast != 0:
-                return self.child.count_covered_cascade(y,self.frame.winfo_y())
-            else:
-                return 1+self.child.count_covered_cascade(y,self.frame.winfo_y())
+            last_visible,remaining = self.child.tally_1(y,True)
+            return last_visible,remaining
+
+    def tally_2(self): #Determines how many generations this shelf is from the last in the app
+        if self.final:
+            return 1
+        else:
+            return self.child.tally_2()+1
 
 class Terminal_Shape: #The end point in the linked list of shapes
     def __init__(self,parent,master):
