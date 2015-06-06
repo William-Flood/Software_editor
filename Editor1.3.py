@@ -37,11 +37,11 @@ class Master:
         self.selection_deletion_handle = lambda s: None #Accessed by shelves
         self.history = [] #A changelog; used to implement an 'undo' feature
         self.text = "START" #Used in debugging
+        self.loaded_file = ""
         self.load_file() #Loads file from disk
         self.scroll("",0,-1) #Sets window to the top of the file
         self.root.bind_all("<MouseWheel>",self.wheeled) #Allows the mouse wheel to control scrolling
         self.root.mainloop() #Opens the main window on screen
-        self.loaded_file = ""
         
         
     def got_click(self,shelf,y): #Modifies top_of_block and bottom_of_block; changes colors of widgets if necessary
