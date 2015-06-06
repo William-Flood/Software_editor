@@ -637,6 +637,9 @@ class Terminal_Shape: #The end point in the linked list of shapes
             return 0
         else: #Returns an error flag
             return -1
+            
+    def de_indent(self,check_tab):
+        pass
         
         
 class Toolpanel: #Controls a window with buttons
