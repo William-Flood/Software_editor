@@ -9,6 +9,9 @@ class Master:
     def __init__(self):
         self.root = tkinter.Tk() #Creates the window that code will be entered into
         self.max_tab = 0
+        self.toolkit_frame = tkinter.Frame(self.root) #Creates a place to put a top menu
+        self.toolkit = Toolpanel(self,self.toolkit_frame) #Provides buttons to add functionality
+        self.toolkit_frame.pack(side='top',fill='x')
         self.scrollframe = tkinter.Frame(self.root) #Creates a frame into which a scrollbar will be entered
         self.scrollbar = tkinter.Scrollbar(self.scrollframe,command=self.scroll) #Creates a scrollbar
         self.scrollbar.pack(fill='y',expand=True) #Adds the scrollbar to the frame
@@ -20,7 +23,7 @@ class Master:
         
         self.first_shelf = Shelf(self,self,1) #Creates a so-called 'shelf' object, which controls entry widgets
         
-        self.child = Shape(self,self,self.first_shelf,0) #Creates a so-called 'Shape' object, representing code statements
+        self.child = Shape(self,self,self.first_shelf,0) #Creates a so-called 'shape' object, representing code statements
         
         self.top_of_block = self.child #top_of_block points to the first shape in a selected block
         self.first_shelf.set_companion(self.top_of_block) #Allows the first shelf to communicate with the first shape
@@ -31,7 +34,6 @@ class Master:
         self.bottom_of_block.child = self.final #A 'child' of a shape comes immediately after that shape
         self.building_selection = False #When true, allows the user to create a selection
         self.seed_shelf = self.first_shelf #Controls to and from which shape a selection will be made
-        self.toolkit = Toolpanel(self) #Provides buttons to add functionality
         self.selection_deletion_handle = lambda s: None #Accessed by shelves
         self.history = [] #A changelog; used to implement an 'undo' feature
         self.text = "START" #Used in debugging
@@ -39,6 +41,7 @@ class Master:
         self.scroll("",0,-1) #Sets window to the top of the file
         self.root.bind_all("<MouseWheel>",self.wheeled) #Allows the mouse wheel to control scrolling
         self.root.mainloop() #Opens the main window on screen
+        self.loaded_file = ""
         
         
     def got_click(self,shelf,y): #Modifies top_of_block and bottom_of_block; changes colors of widgets if necessary
@@ -180,6 +183,7 @@ class Master:
         
     def de_indent(self): #Removes indentation; goes from the topmost selected shape to the end of the code block
         self.got_click(self.top_of_block.companion,self.top_of_block.companion.box.winfo_rooty())
+        print(self.top_of_block.text)
         archive_tuple = self.top_of_block.de_indent(self.top_of_block.tab - 1) #Removes indentation; returns tuple for use in reverting changes
         self.history.append({'parent_index':self.child.from_shape(self.top_of_block)-1,\
             'distance_to_end':len(archive_tuple),'archive_tuple':archive_tuple}) #Saves previous state, should the change need to be reverted
@@ -237,18 +241,25 @@ class Master:
         shape_pointer.child = shape_pointer.fetch_shape(template['distance_to_end']+2) 
         shape_pointer.set_child(shape_clamp) #Removes data as necessary
         
-    def save_file(self): #Opens a window to determine where to save the current project
-        save_window = tkinter.Toplevel()
-        save_prompt = tkinter.Label(save_window,text="Name:")
-        save_field = tkinter.Entry(save_window)
-        save_button = tkinter.Button(save_window,text='Save',command = lambda :\
-            self.execute_save(save_window,save_field.get()))
-        save_field.insert(0,'Developer_environment.py')
-        save_prompt.pack(side='left')
-        save_field.pack(side='right')
-        save_button.pack()
+    def save_file(self): #Saves project to file
+        self.top_of_block.update(True)
+        self.file_window('Save',lambda f,t: self.execute_save(f,t))
+        
+    def load_file(self): #Loads a previously saved file
+        self.file_window('Load',lambda f,t: self.execute_load(f,t))
+        
+    def file_window(self,prompt,function_handle):
+        window_opened = tkinter.Toplevel()
+        prompt_shown = tkinter.Label(window_opened,text="Name:")
+        name_field = tkinter.Entry(window_opened)
+        name_field.insert(0,self.loaded_file)
+        continue_button = tkinter.Button(window_opened,text=prompt,command = lambda: function_handle(window_opened,name_field.get()))
+        prompt_shown.pack(side='left')
+        name_field.pack(side='right')
+        continue_button.pack()
         
     def execute_save(self,window,file_name):
+        self.loaded_file = file_name
         window.destroy()
         try:
             working_file = open(file_name,'w')
@@ -262,14 +273,16 @@ class Master:
                 pass
                 
                 
-    def load_file(self): #Loads a previously saved file
+    def execute_load(self,window_to_close,name):
+        self.loaded_file = name
         self.loading_latch = False
+        window_to_close.destroy()
         self.top_of_block = self.child
         self.bottom_of_block = self.final.parent
         self.selection_deletion(self.top_of_block.companion)
         file_open = True
         try:
-            working_file = open('working_file.py','r') #Currently, the load file is hardcoded
+            working_file = open(name,'r')
             i = 1
             t = 0
             for line in working_file: #Generates shapes
@@ -285,19 +298,19 @@ class Master:
                 if self.top_of_block.tab > t:
                     t = self.top_of_block.tab
                 i+=1
-        except:
+            self.loading_latch = True
+            self.pad_index(len(str(i)))
+            #self.pad_indent(t)
+            self.bottom_of_block = self.top_of_block
+        except Exception as error_handle:
             print("error loading file")
+            print(error_handle)
             file_open = False
             try:
                 working_file.close()
             except:
                 pass
-        
-        self.loading_latch = True
-        self.pad_index(len(str(i)))
-        #self.pad_indent(t)
-        self.bottom_of_block = self.top_of_block
-        
+                
         if file_open:
             working_file.close()
             
@@ -446,7 +459,6 @@ class Shape: #Control code statements
             return self.child.fetch_shape(generations-1)
             
     def de_indent(self,check_tab): #Removes indentation as needed
-        print(self.tab,check_tab)
         if self.tab > check_tab: #check_tab sent as argument; de_indent continues until the end of a code block
             self.tab -=1
             self.companion.tab_marker.set("\u2503 \u250B "*((self.tab+1)//2)+ "\u2503 "*((self.tab+1)%2))
@@ -627,29 +639,29 @@ class Terminal_Shape: #The end point in the linked list of shapes
             return -1
         
         
-        
 class Toolpanel: #Controls a window with buttons
-    def __init__(self,master):
-        self.win = tkinter.Toplevel() #Creates buttons
+    def __init__(self,master,frame):
         self.master = master #Master widget
+        self.vertical_frame = tkinter.Frame(frame)
         
-        self.moveup = tkinter.Button(self.win,text = "\u2191",state='disabled',command = master.bump_up) #Moves selection up
-        self.movedown = tkinter.Button(self.win,text = "\u2193",state='disabled',command = master.bump_down) #Moves selection down
-        self.select = tkinter.Button(self.win,text = "Select",command = master.select_primer) #Allows user to make a selection
-        self.make_save = tkinter.Button(self.win,text = "Save",command = master.save_file) #Allows user to save project
-        self.load = tkinter.Button(self.win,text = "Load",command = master.load_file) #Allows user to load previous project
-        self.addtab = tkinter.Button(self.win,text = "\u2192",command = master.indent)   #Adds indentation
-        self.tabback = tkinter.Button(self.win,text = "\u2190",command = master.de_indent)   #Removes indentation
-        self.undo = tkinter.Button(self.win,text = "Undo",state='disabled',command = master.revert) #Allows user to undo an action
+        self.moveup = tkinter.Button(self.vertical_frame,text = "\u2191",state='disabled',command = master.bump_up) #Moves selection up
+        self.movedown = tkinter.Button(self.vertical_frame,text = "\u2193",state='disabled',command = master.bump_down) #Moves selection down
+        self.select = tkinter.Button(frame,text = "Select",command = master.select_primer) #Allows user to make a selection
+        self.make_save = tkinter.Button(frame,text = "Save",command = master.save_file) #Allows user to save project
+        self.load = tkinter.Button(frame,text = "Load",command = master.load_file) #Allows user to load previous project
+        self.addtab = tkinter.Button(frame,text = "\u2192",command = master.indent)   #Adds indentation
+        self.tabback = tkinter.Button(frame,text = "\u2190",command = master.de_indent)   #Removes indentation
+        self.undo = tkinter.Button(frame,text = "Undo",state='disabled',command = master.revert) #Allows user to undo an action
         
-        self.moveup.grid(row = 0)
-        self.movedown.grid(row = 1)
-        self.addtab.grid(column = 1, row = 0)
-        self.tabback.grid(column = 1, row = 1)
-        self.select.grid(row = 2,column = 0,columnspan = 2)
-        self.make_save.grid(row = 3,column = 0,columnspan = 2)
-        self.load.grid(row = 4,column = 0,columnspan = 2)
-        self.undo.grid(row = 5,column = 0,columnspan = 2)
+        self.vertical_frame.pack(side='left')
+        self.moveup.pack()
+        self.movedown.pack()
+        self.addtab.pack(side='left')
+        self.tabback.pack(side='left')
+        self.select.pack(side='left')
+        self.make_save.pack(side='left')
+        self.load.pack(side='left')
+        self.undo.pack(side='left')
         
         
         
