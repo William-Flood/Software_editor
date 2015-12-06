@@ -1,6 +1,6 @@
 # Software_editor
-A saving place for my software editor program
-Uses python code and the tkinter module to construct app
+A saving place for my software editor program.
+The program uses python code and the tkinter module to construct app.
 
 The main window features a column of entry widgets, used to display and interact with a document stored as a background linked list of 'shape' objects; each shape represents a line of code, and communicates with one or more of the entry widgets.  When the data in an entry widget is changed and clicked out of, the change is saved to shape it communicates with.
 
@@ -16,7 +16,7 @@ Deleting the contents of an entry widget and focusing out of it will remove the 
 
 Pressing the right-pointing arrow will add indentation to the selected shapes.
 
-Pressing the left-pointing arrow will remove one level of indentation from shapes, starting with the topmost-selected shape, and continuing until it reaches a shape with at most one level of indentation lower than the topmost-selected shape, or the end of the document.
+Pressing the left-pointing arrow will remove one level of indentation from shapes, starting with the topmost-selected shape, and continuing down until it reaches a shape with at most one level of indentation lower than the topmost-selected shape, or the end of the document.
 
 The button labeled 'Undo' reverts the most recent change made to the document.
 
